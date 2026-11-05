@@ -1,10 +1,15 @@
 package com.ghajni.smsforwarder.receiver
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Telephony
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.ghajni.smsforwarder.R
 import com.ghajni.smsforwarder.data.AppPreferences
 import com.ghajni.smsforwarder.data.SmsLogDbHelper
 import com.ghajni.smsforwarder.data.SmsLogItem
@@ -20,7 +25,10 @@ class SmsReceiver : BroadcastReceiver() {
 
         // Read all message segments
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-        if (messages.isNullOrEmpty()) return
+        if (messages.isNullOrEmpty()) {
+            Log.w(TAG, "Received SMS_RECEIVED action but messages array was empty.")
+            return
+        }
 
         // Group segments by sender
         val senderMap = mutableMapOf<String, StringBuilder>()
@@ -37,9 +45,26 @@ class SmsReceiver : BroadcastReceiver() {
 
             Log.d(TAG, "Incoming SMS from $sender: $fullBody")
 
+            // Prevent duplicate executions (if both Manifest & Foreground service catch same intent)
+            if (isDuplicate(sender, fullBody)) {
+                Log.d(TAG, "Ignoring duplicate broadcast for SMS from $sender")
+                continue
+            }
+
             // 1. Check if forwarding is enabled
             if (!prefs.isForwardingEnabled) {
-                Log.d(TAG, "Forwarding is disabled, skipping message.")
+                Log.d(TAG, "Forwarding is disabled in settings. Logging and skipping.")
+                dbHelper.insertLog(
+                    SmsLogItem(
+                        sender = sender,
+                        body = fullBody,
+                        forwardedTo = if (targetNumber.isNotBlank()) targetNumber else "None",
+                        timestamp = timestamp,
+                        status = "DISABLED (Toggle is OFF)"
+                    )
+                )
+                notifyUi(context)
+                showNotification(context, "SMS Received (Forwarding OFF)", "From: $sender")
                 continue
             }
 
@@ -52,10 +77,11 @@ class SmsReceiver : BroadcastReceiver() {
                         body = fullBody,
                         forwardedTo = "N/A",
                         timestamp = timestamp,
-                        status = "FAILED (No Target)"
+                        status = "FAILED (No Target Number)"
                     )
                 )
                 notifyUi(context)
+                showNotification(context, "SMS Not Forwarded", "Target phone number is not configured")
                 continue
             }
 
@@ -76,10 +102,11 @@ class SmsReceiver : BroadcastReceiver() {
                             body = fullBody,
                             forwardedTo = targetNumber,
                             timestamp = timestamp,
-                            status = "FILTERED"
+                            status = "FILTERED (No Keyword Match)"
                         )
                     )
                     notifyUi(context)
+                    showNotification(context, "SMS Skipped (Filtered)", "From $sender did not match keywords")
                     continue
                 }
             }
@@ -105,6 +132,12 @@ class SmsReceiver : BroadcastReceiver() {
             )
 
             notifyUi(context)
+
+            if (isSuccess) {
+                showNotification(context, "SMS Forwarded Successfully", "Forwarded from $sender to $targetNumber")
+            } else {
+                showNotification(context, "SMS Forwarding Failed", "Failed to send to $targetNumber. Check SIM balance.")
+            }
         }
     }
 
@@ -130,9 +163,50 @@ class SmsReceiver : BroadcastReceiver() {
         context.sendBroadcast(updateIntent)
     }
 
+    private fun showNotification(context: Context, title: String, content: String) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            ?: return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIF_CHANNEL_ALERTS,
+                "SMS Forwarding Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            manager.createNotificationChannel(channel)
+        }
+
+        val notif = NotificationCompat.Builder(context, NOTIF_CHANNEL_ALERTS)
+            .setSmallIcon(R.drawable.ic_sms)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        manager.notify((System.currentTimeMillis() % 10000).toInt(), notif)
+    }
+
     companion object {
         private const val TAG = "SmsReceiver"
         const val ACTION_LOGS_UPDATED = "com.ghajni.smsforwarder.ACTION_LOGS_UPDATED"
+        const val NOTIF_CHANNEL_ALERTS = "sms_forwarder_alerts"
+
+        private var lastSender = ""
+        private var lastBodyHash = 0
+        private var lastTimestamp = 0L
+
+        @Synchronized
+        fun isDuplicate(sender: String, body: String): Boolean {
+            val now = System.currentTimeMillis()
+            val hash = body.hashCode()
+            if (sender == lastSender && hash == lastBodyHash && (now - lastTimestamp) < 3000) {
+                return true
+            }
+            lastSender = sender
+            lastBodyHash = hash
+            lastTimestamp = now
+            return false
+        }
     }
 }
-

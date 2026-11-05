@@ -24,8 +24,9 @@ object SmsSenderHelper {
         targetNumber: String,
         simSlot: Int = 0
     ): Boolean {
-        if (targetNumber.isBlank()) {
-            Log.e(TAG, "Cannot forward SMS: target phone number is empty.")
+        val cleanTarget = targetNumber.replace("[^0-9+]".toRegex(), "").trim()
+        if (cleanTarget.isBlank() || cleanTarget.length < 4) {
+            Log.e(TAG, "Cannot forward SMS: target phone number '$targetNumber' is invalid.")
             return false
         }
 
@@ -36,14 +37,14 @@ object SmsSenderHelper {
             val parts = smsManager.divideMessage(formattedMessage)
 
             if (parts.size > 1) {
-                smsManager.sendMultipartTextMessage(targetNumber, null, parts, null, null)
+                smsManager.sendMultipartTextMessage(cleanTarget, null, parts, null, null)
             } else {
-                smsManager.sendTextMessage(targetNumber, null, formattedMessage, null, null)
+                smsManager.sendTextMessage(cleanTarget, null, formattedMessage, null, null)
             }
-            Log.i(TAG, "SMS successfully forwarded to $targetNumber")
+            Log.i(TAG, "SMS successfully queued to send to $cleanTarget")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send SMS to $targetNumber", e)
+            Log.e(TAG, "Failed to send SMS to $cleanTarget: ${e.message}", e)
             false
         }
     }

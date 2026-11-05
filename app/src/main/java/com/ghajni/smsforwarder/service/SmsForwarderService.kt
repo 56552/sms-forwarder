@@ -7,18 +7,25 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
+import android.provider.Telephony
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.ghajni.smsforwarder.R
 import com.ghajni.smsforwarder.data.AppPreferences
+import com.ghajni.smsforwarder.receiver.SmsReceiver
 import com.ghajni.smsforwarder.ui.MainActivity
 
 class SmsForwarderService : Service() {
 
+    private var dynamicSmsReceiver: SmsReceiver? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        registerDynamicReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -34,7 +41,43 @@ class SmsForwarderService : Service() {
         return START_STICKY
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterDynamicReceiver()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun registerDynamicReceiver() {
+        if (dynamicSmsReceiver == null) {
+            try {
+                dynamicSmsReceiver = SmsReceiver()
+                val filter = IntentFilter(Telephony.Sms.Intents.SMS_RECEIVED_ACTION).apply {
+                    priority = 999
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(dynamicSmsReceiver, filter, Context.RECEIVER_EXPORTED)
+                } else {
+                    registerReceiver(dynamicSmsReceiver, filter)
+                }
+                Log.d("SmsForwarderService", "Dynamic SmsReceiver registered successfully.")
+            } catch (e: Exception) {
+                Log.e("SmsForwarderService", "Failed to register dynamic SmsReceiver", e)
+            }
+        }
+    }
+
+    private fun unregisterDynamicReceiver() {
+        dynamicSmsReceiver?.let {
+            try {
+                unregisterReceiver(it)
+                Log.d("SmsForwarderService", "Dynamic SmsReceiver unregistered.")
+            } catch (e: Exception) {
+                Log.w("SmsForwarderService", "Error unregistering receiver", e)
+            }
+            dynamicSmsReceiver = null
+        }
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -95,4 +138,3 @@ class SmsForwarderService : Service() {
         }
     }
 }
-
