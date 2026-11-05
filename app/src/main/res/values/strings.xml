@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">SMS Auto Forwarder</string>
+    <string name="forwarding_status">Forwarding Status</string>
+    <string name="status_active">ACTIVE</string>
+    <string name="status_inactive">INACTIVE</string>
+    <string name="service_running_desc">Listening for incoming SMS and auto-forwarding</string>
+    <string name="target_phone_number">Forward-To Phone Number</string>
+    <string name="target_phone_hint">+1234567890 (Include country code)</string>
+    <string name="save">Save</string>
+    <string name="test_send">Test SMS</string>
+    <string name="filters_title">Filter Rules</string>
+    <string name="forward_all">Forward All SMS</string>
+    <string name="forward_matching_only">Forward only if message matches keywords</string>
+    <string name="keyword_hint">e.g. OTP, code, bank, alert, debit, verification</string>
+    <string name="sim_selection">Sending SIM Slot</string>
+    <string name="sim_default">Default SIM</string>
+    <string name="sim_1">SIM 1</string>
+    <string name="sim_2">SIM 2</string>
+    <string name="permissions_title">System Permissions</string>
+    <string name="grant_permissions">Grant All Permissions</string>
+    <string name="battery_optimization">Disable Battery Optimization</string>
+    <string name="battery_desc">Required to keep app alive when screen is off</string>
+    <string name="history_title">Forwarding History</string>
+    <string name="clear_history">Clear Log</string>
+    <string name="no_logs_yet">No SMS forwarded yet. Incoming messages will show here.</string>
+</resources>
+
